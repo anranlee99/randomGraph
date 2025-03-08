@@ -1,17 +1,29 @@
-name: deploy to github pages 
+name: deploy to github pages
 on:
-  push:
-    branches: ["main"]
+    push:
+        branches: ["main"]
 jobs:
-  my-job:
-    name: my-job
-    runs-on: ubuntu-latest
-    steps:
-      # ...
-      - uses: actions/checkout@v4
-      - uses: oven-sh/setup-bun@v2
+    deploy:
+        environment:
+            name: github-pages
+            url: ${{ steps.deployment.outputs.page_url }}
+        name: my-job
+        runs-on: ubuntu-latest
+        steps:
+            # ...
+            - uses: actions/checkout@v4
+            - uses: oven-sh/setup-bun@v2
 
-      # run any `bun` or `bunx` command
-      - run: bun install
-      - run: bun run vite
-      # - run: bun run build
+            - run: bun install
+            - name: Build
+              run: bun run vite build
+            - name: Setup Pages
+              uses: actions/configure-pages@v3
+            - name: Upload artifact
+              uses: actions/upload-pages-artifact@v1
+              with:
+                  # Upload dist repository
+                  path: "./dist"
+            - name: Deploy to GitHub Pages
+              id: deployment
+              uses: actions/deploy-pages@v1
