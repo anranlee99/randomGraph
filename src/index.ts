@@ -17,8 +17,10 @@ import {
     createStatsPanel, 
     updateStatsPanel,
     showGiantComponentNotification,
-    showCycleDetails
+    showCycleDetails,
+    stopAutoRun
 } from './utils';
+import { createComponentDistributionChart } from './component-distribution';
 
 type Node = Matter.Body & { 
     labelText: string;
@@ -52,20 +54,9 @@ const runner = Runner.create();
 // Global variables to store simulation state
 let nodes: Node[] = [];
 let graph: Graph;
-let components: number[][] = []; // Store the components of the graph
-let cycles: number[][] = []; // Store detected cycles
-let edgeProbability = 0.05; // Initial probability for Erdős-Rényi model
-let edgeCount = 0;
-let maxEdges = 0; // Maximum possible edges in the graph
-let giantComponentSize = 0; // Size of the largest component
-let giantComponentThreshold = false; // Whether we've crossed the threshold for giant component
-let statsPanel: HTMLElement;
 let highlightedCycle: number[] | null = null; // Currently highlighted cycle
-
-// Set up UI elements
-const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
-const fullscreenBtn = document.getElementById('fullscreen-btn') as HTMLButtonElement;
-const addConnectionBtn = document.getElementById('add-connection-btn') as HTMLButtonElement;
+let statsPanel: HTMLElement;
+let prevGiantComponentThresholdReached = false; // Track previous threshold state
 
 /**
  * Update stats display and UI
@@ -75,94 +66,87 @@ function updateStats() {
         statsPanel = createStatsPanel(demoElement);
     }
     
-    // Calculate n(n-1)/2 which is the max possible edges in an undirected graph
-    const n = nodes.length;
-    maxEdges = (n * (n - 1)) / 2;
+    // Check if the giant component threshold has been crossed
+    const isAboveThreshold = graph.isAboveGiantComponentThreshold;
     
-    // Theoretical threshold for giant component in Erdős-Rényi model: p = 1/n
-    const thresholdP = 1 / n;
-    const currentP = edgeCount / maxEdges;
-    
-    // Check if we've crossed the threshold
-    const wasGiantComponent = giantComponentThreshold;
-    giantComponentThreshold = currentP >= thresholdP;
-    
-    // Show notification if giant component just formed
-    if (!wasGiantComponent && giantComponentThreshold) {
+    // Show notification if giant component threshold just reached
+    if (!prevGiantComponentThresholdReached && isAboveThreshold) {
         showGiantComponentNotification(demoElement);
     }
     
-    // Update stats display with callbacks for UI controls
+    // Update previous threshold state
+    prevGiantComponentThresholdReached = isAboveThreshold;
+    
+    // Update component distribution chart
+    createComponentDistributionChart(demoElement, graph);
+    
+    // Update stats display
     updateStatsPanel(
         statsPanel,
         {
+            graph,
             nodes,
-            edgeCount,
-            maxEdges,
-            edgeProbability,
-            components,
-            giantComponentSize,
-            giantComponentThreshold,
-            cycleCount: cycles.length,
-            onProbabilityChange: (prob) => {
-                edgeProbability = prob;
-                updateStats();
-            },
-            onStepClick: () => addRandomConnectionWithProbability(),
-            onAutoClick: () => {}, // This is handled in the updateStatsPanel function
+            onStepClick: () => addRandomConnection(),
+            onAutoClick: () => {},
             onHighlightCycles: () => highlightRandomCycle()
         }
     );
 }
 
 /**
- * Find connected components in the graph
+ * Assign component IDs to nodes based on graph analysis
  */
-function findComponents() {
-    if (!graph) return [];
-
-    const n = nodes.length;
-    const visited = new Array(n).fill(false);
-    const componentAssignment = new Array(n).fill(-1);
-    components = [];
-
-    for (let i = 0; i < n; i++) {
-        if (!visited[i]) {
-            const component: number[] = [];
-            dfs(i, visited, component);
-            components.push(component);
-            
-            // Assign component ID to each node
-            component.forEach(nodeIndex => {
-                componentAssignment[nodeIndex] = components.length - 1;
-            });
-        }
-    }
-
-    // Find the size of the largest component
-    giantComponentSize = Math.max(...components.map(comp => comp.length));
-
-    // Assign component IDs to nodes
+function updateNodeComponentAssignments() {
+    // Get the current component analysis
+    const componentAnalysis = graph.componentAnalysis;
+    
+    // Create a mapping from node index to component ID
+    const componentAssignment = new Array(nodes.length).fill(-1);
+    
+    // Assign each node to its component
+    componentAnalysis.forEach((analysis, index) => {
+        analysis.component.forEach(nodeIndex => {
+            componentAssignment[nodeIndex] = index;
+        });
+    });
+    
+    // Update the component IDs in the node objects
     nodes.forEach((node, index) => {
         node.componentId = componentAssignment[index];
     });
+}
 
-    // After finding components, detect cycles
-    detectCycles();
-
-    return components;
-
-    // Helper function for DFS
-    function dfs(v: number, visited: boolean[], component: number[]) {
-        visited[v] = true;
-        component.push(v);
-        
-        for (const neighbor of graph.adjList[v]) {
-            if (!visited[neighbor]) {
-                dfs(neighbor, visited, component);
-            }
-        }
+/**
+ * Highlight a random cycle in the visualization
+ */
+function highlightRandomCycle() {
+    // Reset previous highlight
+    if (highlightedCycle) {
+        highlightedCycle.forEach(nodeIndex => {
+            nodes[nodeIndex].highlighted = false;
+        });
+        highlightedCycle = null;
     }
+    
+    // Find a cycle to highlight using the graph class
+    const cycle = graph.findCycleToHighlight();
+    
+    // If no cycle was found
+    if (!cycle) {
+        alert("No cycles detected in the current graph. Add more connections to create cycles.");
+        return;
+    }
+    
+    // Set the highlighted cycle
+    highlightedCycle = cycle;
+    
+    // Highlight the nodes in the cycle
+    highlightedCycle.forEach(nodeIndex => {
+        nodes[nodeIndex].highlighted = true;
+    });
+    
+    // Show cycle details
+    showCycleDetails(demoElement, highlightedCycle);
 }
 
 /**
@@ -174,12 +158,8 @@ function setupSimulation() {
 
     // Reset variables
     nodes = [];
-    edgeCount = 0;
-    components = [];
-    cycles = [];
-    giantComponentSize = 0;
-    giantComponentThreshold = false;
     highlightedCycle = null;
+    prevGiantComponentThresholdReached = false;
 
     // Define grid parameters
     const rows = 10;
@@ -251,15 +231,38 @@ function setupSimulation() {
 
     // Create a graph instance for our nodes
     graph = new Graph(nodes.length);
-
-    // Initialize components
-    findComponents();
+    
+    // Update node component assignments
+    updateNodeComponentAssignments();
     
     // Set up stats panel
     updateStats();
 
-    // Return the components
     return { nodes, graph };
+}
+
+/**
+ * Generate an entire Erdős-Rényi G(n,p) random graph with given probability p
+ * @param probability - The probability of adding each possible edge
+ */
+function generateRandomGraph(probability: number) {
+    // Reset the simulation first
+    setupSimulation();
+    
+    const n = nodes.length;
+    
+    // For each pair of nodes, add an edge with probability p
+    for (let i = 0; i < n; i++) {
+        for (let j = i + 1; j < n; j++) {
+            if (Math.random() < probability) {
+                attachSpring(i, j);
+            }
+        }
+    }
+    
+    // Update the components and stats after all edges are added
+    updateNodeComponentAssignments();
+    updateStats();
 }
 
 /**
@@ -316,57 +319,17 @@ function attachSpring(indexA: number, indexB: number) {
     graph.addEdge(indexA, indexB);
     graph.addEdge(indexB, indexA);
     
-    // Increment edge count
-    edgeCount++;
+    // Update node component assignments
+    updateNodeComponentAssignments();
     
-    // Update components after adding edge
-    findComponents();
+    // Update stats
     updateStats();
     
     return true;
 }
 
 /**
- * Add a random connection based on the current probability value
- */
-function addRandomConnectionWithProbability() {
-    // Add connection with probability p
-    if (!nodes || nodes.length === 0) {
-        console.error('No nodes available');
-        return;
-    }
-
-    // For all possible pairs of nodes
-    let connections = 0;
-    const maxAttempts = 10; // Limit attempts to avoid infinite loops
-
-    for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        // Pick a random pair
-        const i = Math.floor(Math.random() * nodes.length);
-        let j = Math.floor(Math.random() * nodes.length);
-
-        // Make sure we don't connect a node to itself
-        while (j === i) {
-            j = Math.floor(Math.random() * nodes.length);
-        }
-
-        // Check if we should add this edge based on probability
-        if (Math.random() < edgeProbability) {
-            // If connection was successfully added, break
-            if (attachSpring(i, j)) {
-                connections++;
-                break;
-            }
-        }
-    }
-
-    if (connections === 0) {
-        console.log("No new connections made in this step");
-    }
-}
-
-/**
- * Add a completely random connection (the original method)
+ * Add a random connection
  */
 function addRandomConnection() {
     if (!nodes || nodes.length === 0) {
@@ -374,6 +337,7 @@ function addRandomConnection() {
         return;
     }
 
+    // Pick a random pair of nodes
     const i = Math.floor(Math.random() * nodes.length);
     let j = Math.floor(Math.random() * nodes.length);
 
@@ -385,66 +349,33 @@ function addRandomConnection() {
     attachSpring(i, j);
 }
 
-/**
- * Detect cycles in the graph and store them.
- * Returns an array of cycles, where each cycle is represented as an array of node indices.
- */
-function detectCycles() {
-    if (!graph) {
-        console.error('Graph not initialized');
-        return [];
-    }
-
-    // Reset any existing highlighted nodes
-    nodes.forEach(node => {
-        node.highlighted = false;
-    });
-    
-    // Find all cycles in the graph
-    cycles = graph.findCycles();
-    console.log("Cycles detected:", cycles);
-    return cycles;
-}
-
-/**
- * Highlight a random cycle in the visualization
- */
-function highlightRandomCycle() {
-    // Reset previous highlight
-    if (highlightedCycle) {
-        highlightedCycle.forEach(nodeIndex => {
-            nodes[nodeIndex].highlighted = false;
-        });
-        highlightedCycle = null;
-    }
-    
-    // If there are no cycles, show an alert
-    if (cycles.length === 0) {
-        alert("No cycles detected in the current graph. Add more connections to create cycles.");
-        return;
-    }
-    
-    // Pick a random cycle
-    const randomIndex = Math.floor(Math.random() * cycles.length);
-    highlightedCycle = cycles[randomIndex];
-    
-    // Highlight the nodes in the cycle
-    highlightedCycle.forEach(nodeIndex => {
-        nodes[nodeIndex].highlighted = true;
-    });
-    
-    // Show cycle details
-    showCycleDetails(demoElement, highlightedCycle);
-}
-
 // Set up event listeners for UI buttons
+const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
 resetBtn.addEventListener('click', setupSimulation);
 
+const fullscreenBtn = document.getElementById('fullscreen-btn') as HTMLButtonElement;
 fullscreenBtn.addEventListener('click', () => toggleFullscreen(demoElement));
 
 // Update connection button text and function
-addConnectionBtn.textContent = "Add Connection (Manual)";
+const addConnectionBtn = document.getElementById('add-connection-btn') as HTMLButtonElement;
+addConnectionBtn.textContent = "Add Random Connection";
 addConnectionBtn.addEventListener('click', addRandomConnection);
+
+// Add a new button for generating a random graph
+const generateBtn = document.createElement('button');
+generateBtn.id = 'generate-graph-btn';
+generateBtn.className = 'action-button';
+generateBtn.textContent = "Generate G(n,p) Random Graph";
+generateBtn.style.marginLeft = '10px';
+generateBtn.addEventListener('click', () => {
+    const probability = parseFloat(prompt("Enter probability p (0-1):", "0.1") || "0.1");
+    if (probability >= 0 && probability <= 1) {
+        generateRandomGraph(probability);
+    } else {
+        alert("Please enter a valid probability between 0 and 1");
+    }
+});
+document.querySelector('.action-buttons')?.appendChild(generateBtn);
 
 // Draw labels for each node after rendering the world
 Events.on(render, 'afterRender', () => {
@@ -465,9 +396,7 @@ Events.on(render, 'afterRender', () => {
                 
                 const color = getComponentColor(
                     bodyA.componentId, 
-                    components.length,
-                    components,
-                    giantComponentSize
+                    graph
                 );
                 
                 // Check if this connection is part of the highlighted cycle
@@ -502,9 +431,7 @@ Events.on(render, 'afterRender', () => {
         if (node.componentId >= 0) {
             const color = getComponentColor(
                 node.componentId, 
-                components.length,
-                components,
-                giantComponentSize
+                graph
             );
             node.render.fillStyle = node.highlighted ? '#ffff00' : color;
             
@@ -537,8 +464,7 @@ Runner.run(runner, engine);
 
 // Export functions for external use (e.g., console debugging)
 (window as any).attachSpring = attachSpring;
-(window as any).findComponents = findComponents;
 (window as any).addRandomConnection = addRandomConnection;
-(window as any).addRandomConnectionWithProbability = addRandomConnectionWithProbability;
-(window as any).detectCycles = detectCycles;
 (window as any).highlightRandomCycle = highlightRandomCycle;
+(window as any).generateRandomGraph = generateRandomGraph;
+(window as any).graph = graph;

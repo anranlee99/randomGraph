@@ -1,41 +1,40 @@
 import * as Matter from 'matter-js';
+import { Graph } from './graph';
 
 // Store the autorun interval ID globally for proper toggling
 let autoRunIntervalId: number | null = null;
 let isAutoRunning = false;
 
 /**
- * Color scheme for components - using HSL for better distribution
- * @param componentId The ID of the component to color
- * @param totalComponents Total number of components in the graph
- * @param components The array of components (arrays of node indices)
- * @param giantComponentSize Size of the largest component
- * @returns A CSS color string in HSL format
- */
-/**
  * Color scheme for components
  * @param componentId The ID of the component to color
- * @param totalComponents Total number of components in the graph
- * @param components The array of components (arrays of node indices)
- * @param giantComponentSize Size of the largest component
+ * @param graph The Graph instance to get component information from
  * @returns A CSS color string for the component
  */
 export function getComponentColor(
-    componentId: number, 
-    totalComponents: number,
-    components: number[][],
-    giantComponentSize: number
+    componentId: number,
+    graph: Graph
 ): string {
-    // If this is the giant component (largest component), make it stand out
-    if (components[componentId] && 
-        components[componentId].length === giantComponentSize && 
-        giantComponentSize > 3) {
-        return `#ff5500`; // Fixed color for giant component
-    } else if (components[componentId] && components[componentId].length > 1) {
-        return `#76f09b`; // Fixed color for small components
+    const analysis = graph.componentAnalysis;
+
+    if (componentId < 0 || componentId >= analysis.length) {
+        return '#0077ff'; // Default blue for unknown components
     }
-    
-    return `#0077ff`; // Color for isolated nodes
+
+    const component = analysis[componentId];
+
+    // If this is the giant component, make it stand out
+    if (component.vertices === graph.giantComponentSize && component.vertices > 3) {
+        return '#ff5500'; // Orange for giant component
+    } else if (component.isIsolated) {
+        return '#0077ff'; // Blue for isolated nodes
+    } else if (component.isTree) {
+        return '#76f09b'; // Green for trees
+    } else if (component.isUnicyclic) {
+        return '#f5b862'; // Yellow/orange for unicyclic
+    } else {
+        return '#ff5500'; // Orange/red for multicyclic
+    }
 }
 
 /**
@@ -111,14 +110,14 @@ export function showGiantComponentNotification(demoElement: HTMLElement): void {
     if (existingNotification) {
         existingNotification.remove();
     }
-    
+
     const notification = document.createElement('div');
     notification.id = 'giant-component-notification';
     notification.className = 'giant-component-notification';
-    notification.textContent = 'Giant Component Formed!';
-    
+    notification.textContent = 'Giant Component Threshold Reached!';
+
     demoElement.appendChild(notification);
-    
+
     // Remove the notification after animation completes
     setTimeout(() => {
         if (notification.parentNode) {
@@ -149,7 +148,7 @@ export function showCycleDetails(demoElement: HTMLElement, cycle: number[]): voi
     if (existingModal) {
         existingModal.remove();
     }
-    
+
     const modal = document.createElement('div');
     modal.id = 'cycle-details-modal';
     modal.style.position = 'fixed';
@@ -162,16 +161,16 @@ export function showCycleDetails(demoElement: HTMLElement, cycle: number[]): voi
     modal.style.color = 'white';
     modal.style.zIndex = '200';
     modal.style.boxShadow = '0 0 20px rgba(0, 0, 0, 0.5)';
-    
+
     const title = document.createElement('h3');
     title.textContent = 'Cycle Details';
     title.style.marginTop = '0';
     title.style.borderBottom = '1px solid #555';
     title.style.paddingBottom = '10px';
-    
+
     const cycleNodes = document.createElement('p');
     cycleNodes.textContent = `Nodes: ${cycle.join(' → ')} → ${cycle[0]}`;
-    
+
     const closeButton = document.createElement('button');
     closeButton.textContent = 'Close';
     closeButton.style.padding = '5px 10px';
@@ -181,17 +180,17 @@ export function showCycleDetails(demoElement: HTMLElement, cycle: number[]): voi
     closeButton.style.borderRadius = '3px';
     closeButton.style.cursor = 'pointer';
     closeButton.style.marginTop = '10px';
-    
+
     closeButton.addEventListener('click', () => {
         modal.remove();
     });
-    
+
     modal.appendChild(title);
     modal.appendChild(cycleNodes);
     modal.appendChild(closeButton);
-    
+
     demoElement.appendChild(modal);
-    
+
     // Auto-remove after 5 seconds
     setTimeout(() => {
         if (modal.parentNode) {
@@ -208,73 +207,109 @@ export function showCycleDetails(demoElement: HTMLElement, cycle: number[]): voi
 export function updateStatsPanel(
     statsPanel: HTMLElement,
     params: {
+        graph: Graph,
         nodes: Matter.Body[],
-        edgeCount: number,
-        maxEdges: number,
-        edgeProbability: number,
-        components: number[][],
-        giantComponentSize: number,
-        giantComponentThreshold: boolean,
-        cycleCount: number,
-        onProbabilityChange: (prob: number) => void,
         onStepClick: () => void,
         onAutoClick: () => void,
-        onHighlightCycles: () => void
+        onHighlightCycles?: () => void
     }
 ): void {
     const {
+        graph,
         nodes,
-        edgeCount,
-        maxEdges,
-        edgeProbability,
-        components,
-        giantComponentSize,
-        giantComponentThreshold,
-        onProbabilityChange,
         onStepClick,
-        onAutoClick
+        onAutoClick,
+        onHighlightCycles
     } = params;
-    
-    // Calculate theoretical threshold for giant component in Erdős-Rényi model: p = 1/n
-    const n = nodes.length;
-    const thresholdP = 1 / n;
-    const currentP = edgeCount / maxEdges;
-    
+
+    // Get all the analysis from the graph
+    const componentAnalysis = graph.componentAnalysis;
+    const typeCounts = graph.componentTypeCounts;
+    const totalCycles = graph.totalCycleCount;
+    const giantComponentSize = graph.giantComponentSize;
+    const edgeCount = graph.edgeCount;
+    const maxEdges = graph.maxEdgeCount;
+    const currentP = graph.edgeProbability;
+    const thresholdP = graph.criticalThreshold;
+    const expectedGiantSize = graph.expectedGiantComponentSize;
+    const entropy = graph.componentSizeEntropy;
+    const giantComponentThresholdReached = graph.isAboveGiantComponentThreshold;
+
+    // Sort component analysis by size (descending) - should already be sorted by Graph class
+    const sortedAnalysis = componentAnalysis;
+
     // Update stats display
     statsPanel.innerHTML = `
-        <h3 style="margin: 0 0 10px 0; border-bottom: 1px solid #555; padding-bottom: 5px;">Random Graph Stats</h3>
+        <h3 style="margin: 0 0 10px 0; border-bottom: 1px solid #555; padding-bottom: 5px;">Random Graph Statistics</h3>
         <div style="margin-bottom: 15px;">
-            <div><strong>Nodes:</strong> ${n}</div>
+            <div><strong>Nodes:</strong> ${nodes.length}</div>
             <div><strong>Edges:</strong> ${edgeCount} / ${maxEdges}</div>
             <div><strong>Edge Probability (p):</strong> ${currentP.toFixed(4)}</div>
-            <div><strong>Threshold (1/n):</strong> ${thresholdP.toFixed(4)}</div>
+            <div><strong>Critical Threshold (1/n):</strong> ${thresholdP.toFixed(4)}</div>
         </div>
         <div style="margin-bottom: 15px;">
-            <div><strong>Components:</strong> ${components.length}</div>
-            <div><strong>Largest Component:</strong> ${giantComponentSize} nodes</div>
-            <div><strong>Giant Component:</strong> ${giantComponentThreshold ? 'YES ✓' : 'NO ✗'}</div>
+            <div><strong>Components:</strong> ${componentAnalysis.length}</div>
+            <div><strong>Largest Component:</strong> ${giantComponentSize} nodes (${(giantComponentSize / nodes.length * 100).toFixed(1)}%)</div>
+            <div><strong>Giant Component Threshold:</strong> ${giantComponentThresholdReached ? 'Reached ✓' : 'Not Reached ✗'}</div>
+            ${expectedGiantSize > 0 ? `<div><strong>Expected Giant Size:</strong> ~${expectedGiantSize} nodes (${(expectedGiantSize / nodes.length * 100).toFixed(1)}%)</div>` : ''}
+            <div><strong>Component Size Entropy:</strong> ${entropy.toFixed(3)}</div>
+            <div><strong>Total Cycles:</strong> ${totalCycles}</div>
+        </div>
+        <div style="margin-bottom: 15px; border-top: 1px solid #555; padding-top: 10px;">
+            <h4 style="margin: 0 0 10px 0;">Component Types</h4>
+            <div><strong>Isolated Nodes:</strong> ${typeCounts.isolated}</div>
+            <div><strong>Trees:</strong> ${typeCounts.tree}</div>
+            <div><strong>Unicyclic:</strong> ${typeCounts.unicyclic}</div>
+            <div><strong>Multi-cyclic:</strong> ${typeCounts.multicyclic}</div>
+        </div>
+        <div style="margin-bottom: 15px; border-top: 1px solid #555; padding-top: 10px;">
+            <h4 style="margin: 0 0 10px 0;">Largest Components</h4>
+            <table style="width: 100%; font-size: 12px; border-collapse: collapse;">
+                <thead>
+                    <tr style="border-bottom: 1px solid #555;">
+                        <th style="text-align: left; padding: 3px;">Rank</th>
+                        <th style="text-align: center; padding: 3px;">Vertices</th>
+                        <th style="text-align: center; padding: 3px;">Edges</th>
+                        <th style="text-align: center; padding: 3px;">Cycles</th>
+                        <th style="text-align: center; padding: 3px;">Type</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${sortedAnalysis.slice(0, 5).map((analysis, idx) => {
+        let componentType = 'Isolated';
+        if (analysis.isTree) componentType = 'Tree';
+        else if (analysis.isUnicyclic) componentType = 'Unicyclic';
+        else if (analysis.isMulticyclic) componentType = 'Multi-cyclic';
 
+        const isGiant = idx === 0 && analysis.vertices > 3;
+        const rowStyle = isGiant ? 'background-color: rgba(255, 85, 0, 0.2);' : '';
+
+        return `
+                            <tr style="border-bottom: 1px solid rgba(255,255,255,0.1); ${rowStyle}">
+                                <td style="padding: 3px;">#${idx + 1}</td>
+                                <td style="text-align: center; padding: 3px;">${analysis.vertices}</td>
+                                <td style="text-align: center; padding: 3px;">${analysis.edges}</td>
+                                <td style="text-align: center; padding: 3px;">${analysis.cycles}</td>
+                                <td style="text-align: center; padding: 3px;">${componentType}</td>
+                            </tr>
+                        `;
+    }).join('')}
+                </tbody>
+            </table>
         </div>
-        <div style="margin-bottom: 10px; border-top: 1px solid #555; padding-top: 10px;">
-            <label for="probability-slider" style="display:block; margin-bottom: 5px;">Edge Probability: ${edgeProbability.toFixed(2)}</label>
-            <input type="range" id="probability-slider" min="0.01" max="1" step="0.01" value="${edgeProbability}" style="width: 100%">
+        <div style="margin-bottom: 15px; border-top: 1px solid #555; padding-top: 10px;">
+            <div style="display: flex; gap: 5px; margin-bottom: 8px;">
+                <button id="step-btn" style="flex: 1; padding: 5px 10px; background: #0077ff; border: none; color: white; border-radius: 3px; cursor: pointer;">Add Edge</button>
+                <button id="auto-btn" style="flex: 1; padding: 5px 10px; background: #0077ff; border: none; color: white; border-radius: 3px; cursor: pointer;">${isAutoRunning ? 'Stop' : 'Auto'}</button>
+            </div>
+            ${onHighlightCycles ? `<button id="highlight-cycles-btn" style="width: 100%; padding: 5px 10px; background: #76f09b; border: none; color: white; border-radius: 3px; cursor: pointer;">Highlight Random Cycle</button>` : ''}
         </div>
-        <button id="step-btn" style="margin-right: 5px; padding: 5px 10px; background: #0077ff; border: none; color: white; border-radius: 3px; cursor: pointer;">Step</button>
-        <button id="auto-btn" style="padding: 5px 10px; background: #0077ff; border: none; color: white; border-radius: 3px; cursor: pointer;">${isAutoRunning ? 'Stop' : 'Auto'}</button>
     `;
 
     // Add event listeners for the controls
-    const slider = document.getElementById('probability-slider') as HTMLInputElement;
     const stepBtn = document.getElementById('step-btn') as HTMLButtonElement;
     const autoBtn = document.getElementById('auto-btn') as HTMLButtonElement;
     const highlightCyclesBtn = document.getElementById('highlight-cycles-btn') as HTMLButtonElement;
-
-    if (slider) {
-        slider.addEventListener('input', (e) => {
-            const newProbability = parseFloat((e.target as HTMLInputElement).value);
-            onProbabilityChange(newProbability);
-        });
-    }
 
     if (stepBtn) {
         stepBtn.addEventListener('click', onStepClick);
@@ -298,4 +333,7 @@ export function updateStatsPanel(
         });
     }
 
+    if (highlightCyclesBtn && onHighlightCycles) {
+        highlightCyclesBtn.addEventListener('click', onHighlightCycles);
+    }
 }
