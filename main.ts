@@ -1,138 +1,122 @@
+const sceneConfig = {
+    active: false,
+    visible: false,
+    key: 'Main',
+}
 export class Main extends Phaser.Scene {
+    
     constructor() {
-        super('intro');
+        super(sceneConfig);
     }
+    graphics!: Phaser.GameObjects.Graphics; 
+    w!: number;
+    h!: number;
+    giantDetected: boolean = false;
+    toggleDebug!: Phaser.Input.Keyboard.Key;
+    canDrag!: number;
+    init() {
+        this.graphics = this.add.graphics();
+        this.matter.world.setBounds();
+        this.w = this.game.config.width as number
+        this.h = this.game.config.height as number
+        this.matter.world.drawDebug = false;
+        this.toggleDebug = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.P);
+    }
+    // makeNode() {
+    //     // this is a node
+    //     // store this in DS for SCC detection
+    //     // write a label on the node
+    //     let node = this.matter.add.circle(this.w * 0.25, this.h * 0.25, 0, { isStatic: true })
+    // }
+    addEdge(bodyA: MatterJS.BodyType, bodyB: MatterJS.BodyType){
+        // this is the edge
+        // but we probably need to store this in a DS for the SCC detection? 
+        let spring = this.matter.add.spring(bodyA, bodyB, 0, 0.03);
+    }
+    createNodes() {
+        const rows = 10;
+        const cols = 10;
+        const margin = 50;
+        const availableWidth = this.w - 2 * margin;
+        const availableHeight = this.h - 2 * margin;
+        const xSpacing = cols > 1 ? availableWidth / (cols - 1) : 0;
+        const ySpacing = rows > 1 ? availableHeight / (rows - 1) : 0;
 
-    drawTrajectory() {
+        for (let row = 0; row < rows; row++) {
+            for (let col = 0; col < cols; col++) {
+                const index = row * cols + col;
+                const labelText = index.toString().padStart(2, '0');
+                const x = margin + col * xSpacing;
+                const y = margin + row * ySpacing;
 
-        this.graphics.clear();
-        //credit: adam smith 
-        let hWorld = new Phaser.Physics.Matter.World(this, this.matter.config);
-        let hFactory = new Phaser.Physics.Matter.Factory(hWorld);
-        let hDot = hFactory.circle(this.w * 0.25, this.h * 0.25, 0, { isStatic: true })
-        let hBall = hFactory.circle(this.ball.position.x, this.ball.position.y, 32);
-        let hSpring = hFactory.spring(hBall, hDot, this.spring.length, this.spring.stiffness);
-        const step = 1000 / 60;
-        hWorld.update(0, step);
+                // Create a container at (x, y)
+                let container = this.add.container(x, y);
 
-        hWorld.removeConstraint(hSpring);
+                // Create a circle graphic centered at (0,0)
+                let circle = this.add.circle(0, 0, 20, 0x0077ff);
 
-        if (Math.abs(hBall.position.y - this.ball.position.y) > 1) {
-            for (let t = 0; t < 1000; t += step) {
-                let { x, y } = hBall.position;
-                this.graphics.fillCircle(x, y, 3);
-                hWorld.update(t, step);
+                // Create a text object centered at (0,0)
+                let text = this.add.text(0, 0, labelText, {
+                    fontSize: '14px',
+                    color: '#ffffff'
+                }).setOrigin(0.5);
+
+                container.add([circle, text]);
+
+                // Add the container to the Matter world with a circular body.
+                // We keep a reference to the returned GameObject.
+                let nodeGameObject = this.matter.add.gameObject(container, {
+                    shape: { type: 'circle', radius: 20 }
+                }) as Phaser.Physics.Matter.Sprite;
+                // console.log( nodeGameObject);
+
+                // Set the node's body to be part of our draggable collision group.
+
+                //@ts-ignore
+                nodeGameObject.body!.collisionFilter.group = this.canDrag;
             }
-        }
-
-    }
-
-    checkGameOver() {
-        //see if the highest block is higher than half the screen
-        let blocks_highest = this.blocks.reduce((acc, cur) => {
-            return acc < cur.position.y ? acc : cur.position.y
-        }, this.h)
-        
-        this.gameOver = blocks_highest > (this.h * 0.5)
-        if (this.gameOver) {
-            this.cameras.main.fade(1000,0,0,0)
-            this.time.delayedCall(2000, () => {
-                this.scene.start('zones')
-            })
-        } else {
-            //check if the mouseSpring has been released
-            const d = this.matter.world.localWorld.constraints.filter((c) => {
-                return c.label === "Pointer Constraint"
-            })
-            if(!d.length){
-                this.time.delayedCall(10000, () => {
-                    this.cameras.main.fade(1000,0,0,0)
-                    this.scene.restart()
-                })
-            }
-        }
-
-    }
-    checkFired() {
-        //release the spring if the ball is far enough away
-        let disp = Phaser.Math.Distance.Between(this.ball.position.x, this.ball.position.y, this.dot.position.x, this.dot.position.y);
-        if (disp > this.ball.circleRadius && !this.input.activePointer.isDown) {
-            this.matter.world.removeConstraint(this.spring)
-            this.predict = false
-            this.graphics.clear()
-            //remove the mouse spring
-            const d = this.matter.world.localWorld.constraints.filter((c) => {
-                return c.label === "Pointer Constraint"
-            })
-            d.forEach((constraint) => {
-                this.matter.world.removeConstraint(constraint)
-            })
-            // this.matter.world.remove(this.matter.world.constraints[0])
-        }
-        if (this.predict) {
-            this.drawTrajectory()
         }
     }
 
     create() {
-        this.graphics = this.add.graphics();
-        this.matter.world.setBounds();
-        this.w = this.game.config.width
-        this.h = this.game.config.height
-
-        //the anchor for the spring
-        this.dot = this.matter.add.circle(this.w * 0.25, this.h * 0.25, 0, { isStatic: true })
-        //turn off collision for the anchor
-        this.dot.collisionFilter = {
-            category: 0x0000,
-            mask: 0x0000
-        };
-        //the ball and spring
-        const canDrag = this.matter.world.nextGroup();
-        this.ball = this.matter.add.circle(this.w * 0.25, this.h * 0.25, 32, { 
-            collisionFilter: { group: canDrag },
-            render: {
-                fillColor: 0xffffff,
-                fillOpacity: 1,
-            }
-        });
-        this.spring = this.matter.add.spring(this.ball, this.dot, 0, 0.03);
-        this.spring.render.visible = false;
-        this.matter.add.mouseSpring
-        this.matter.add.mouseSpring({ collisionFilter: { group: canDrag } });
-        this.blocks = []
-        for (let i = 0; i < 10; i++) {
-            let b = this.matter.add.rectangle(this.w * 0.75, this.h * i / 10, 100, this.h * 0.09, {
-
-                render: {
-                    fillColor: 0xaaaaaa,
-                    fillOpacity: 1,
-                }
-            })
-            this.blocks.push(b)
-        }
-        // console.log(this.matter.world.localWorld)
-        this.predict = true
-        this.gameOver = false
-        this.add.text(this.w, 0, "restart", {
+        // Create interactive texts for stepping or auto-running edges.
+        this.add.text(this.w, 0, "step", {
             fontSize: '32px',
-        }).setOrigin(1, 0).setPadding(10).setInteractive({useHandCursor: true}).on('pointerdown', () => {
-            this.scene.restart()
-        })
-        this.add.text(this.w, 30, "zones", {
+        }).setOrigin(1, 0).setPadding(10)
+          .setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => {
+              // Step functionality: add an edge, update DS, etc.
+          });
+
+        this.add.text(this.w, 30, "auto run", {
             fontSize: '32px',
-        }).setOrigin(1, 0).setPadding(10).setInteractive({useHandCursor: true}).on('pointerdown', () => {
-            this.scene.start('zones')
-        })
+        }).setOrigin(1, 0).setPadding(10)
+          .setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => {
+              // Auto-run functionality: add edges until the giant component is detected.
+          });
+
+        // Create one collision group that will be used for all draggable objects.
+        this.canDrag = this.matter.world.nextGroup();
+
+        // Enable dragging with a mouse spring. This makes objects in the canDrag group draggable.
+        this.matter.add.mouseSpring({ collisionFilter: { group: this.canDrag } });
+        console.log(this.matter.add.mouseSpring)
+        // Create our 100 nodes.
+        this.createNodes();
     }
+    
+    
     update() {
-        if (!this.gameOver && !this.predict) {
-            this.checkGameOver()
-        }
-        if (this.predict) {
-            this.checkFired()
-        }
-
+        if (Phaser.Input.Keyboard.JustDown(this.toggleDebug)) {
+            if (this.matter.world.drawDebug) {
+              this.matter.world.drawDebug = false;
+              this.matter.world.debugGraphic.clear();
+            }
+            else {
+              this.matter.world.drawDebug = true;
+            }
+          }
 
     }
 }
