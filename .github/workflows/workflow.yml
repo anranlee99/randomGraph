@@ -1,6 +1,7 @@
 name: deploy to github pages
 
 permissions:
+    id-token: write
     contents: read
     pages: write
 
@@ -12,7 +13,7 @@ jobs:
         environment:
             name: github-pages
             url: ${{ steps.deployment.outputs.page_url }}
-        name: my-job
+        name: deploy to github pages
         runs-on: ubuntu-latest
         steps:
             # ...
