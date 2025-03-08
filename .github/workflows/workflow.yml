@@ -21,13 +21,13 @@ jobs:
       - run: bun install
       - name: Build
         run: bun run vite build
-      
+
       # Upload the built files as an artifact
       - name: Upload artifact for GitHub Pages
         uses: actions/upload-pages-artifact@v1
         with:
           path: "./dist"
-      
+
       # Deploy the uploaded artifact
       - name: Deploy to GitHub Pages
         id: deployment
