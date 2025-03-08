@@ -281,6 +281,46 @@ html, body {
   padding: 10px;
 }
 
+/* Stats Panel */
+#stats-panel {
+  position: fixed;
+  top: 60px;
+  right: 20px;
+  background-color: rgba(20, 21, 31, 0.8);
+  padding: 15px;
+  border-radius: 5px;
+  color: white;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  z-index: 100;
+  width: 250px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+}
+
+#stats-panel h3 {
+  margin: 0 0 10px 0;
+  border-bottom: 1px solid #555;
+  padding-bottom: 5px;
+}
+
+#stats-panel button {
+  padding: 5px 10px;
+  background: #0077ff;
+  border: none;
+  color: white;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-right: 5px;
+}
+
+#stats-panel button:hover {
+  background: #0066dd;
+}
+
+#stats-panel input[type="range"] {
+  width: 100%;
+}
+
 /* Fullscreen mode */
 .matter-is-fullscreen .matter-demo {
   padding: 0;
@@ -289,4 +329,55 @@ html, body {
 .matter-is-fullscreen .matter-demo canvas {
   max-height: 100%;
   max-width: 100%;
+}
+
+/* Legend panel */
+#legend-panel {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  background-color: rgba(20, 21, 31, 0.8);
+  padding: 10px;
+  border-radius: 5px;
+  color: white;
+  font-family: Arial, sans-serif;
+  font-size: 12px;
+  z-index: 100;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
+}
+
+.legend-color {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+/* Notification for giant component emergence */
+.giant-component-notification {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: rgba(0, 119, 255, 0.9);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  font-size: 18px;
+  text-align: center;
+  z-index: 200;
+  animation: fadeInOut 3s forwards;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes fadeInOut {
+  0% { opacity: 0; }
+  10% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
 }

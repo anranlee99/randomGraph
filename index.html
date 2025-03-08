@@ -4,8 +4,68 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
     <meta name="viewport" content="width=device-width,initial-scale=1.0,minimum-scale=1.0,maximum-scale=1.0,user-scalable=no,minimal-ui">
-    <title>Matter.js Node Network Simulation</title>
+    <title>Random Graph Evolution - Erdős-Rényi Model & Giant Component</title>
     <link rel="stylesheet" href="styles.css">
+    <style>
+      /* Modal styles */
+      .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        overflow: auto;
+        background-color: rgba(0, 0, 0, 0.8);
+      }
+      
+      .modal-content {
+        background-color: #14151f;
+        margin: 5% auto;
+        padding: 20px;
+        border: 1px solid #333;
+        border-radius: 8px;
+        width: 80%;
+        max-width: 800px;
+        max-height: 80vh;
+        overflow-y: auto;
+        color: #fff;
+      }
+      
+      .close {
+        color: #aaa;
+        float: right;
+        font-size: 28px;
+        font-weight: bold;
+      }
+      
+      .close:hover,
+      .close:focus {
+        color: #fff;
+        text-decoration: none;
+        cursor: pointer;
+      }
+      
+      .modal h2 {
+        color: #76f09b;
+        border-bottom: 1px solid #333;
+        padding-bottom: 10px;
+      }
+      
+      .modal h3 {
+        color: #f5b862;
+        margin-top: 20px;
+      }
+      
+      .key-concept {
+        background-color: rgba(255, 255, 255, 0.1);
+        padding: 15px;
+        margin: 15px 0;
+        border-radius: 5px;
+        border-left: 4px solid #0077ff;
+      }
+    </style>
   </head>
   <body>
     <div class="matter-demo">
@@ -13,7 +73,7 @@
         <header class="matter-header">
           <div class="matter-header-inner">
             <h1 class="matter-demo-title">
-              <a href="#">Node Network Simulation</a>
+              <a href="#">Random Graph Evolution</a>
             </h1>
             <div class="matter-toolbar">
               <button class="matter-btn matter-btn-reset" title="Reset" id="reset-btn">
@@ -34,6 +94,12 @@
                   <path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z"/>
                 </svg>
               </button>
+              <button class="matter-btn matter-btn-info" title="Info" id="info-btn">
+                <svg fill="#000000" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M0 0h24v24H0z" fill="none"/>
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
+                </svg>
+              </button>
             </div>
             <a class="matter-link" href="https://brm.io/matter-js/" title="matter.js" target="_blank">
               <svg class="matter-logo" height="100" viewBox="0 952.04859 330 100" width="268" xmlns="http://www.w3.org/2000/svg">
@@ -48,8 +114,10 @@
       
       <!-- Canvas will be inserted here by Matter.js -->
       
-      <!-- Add connection button -->
-      <button id="add-connection-btn" class="action-button">Add Random Connection</button>
+      <!-- Action buttons -->
+      <div class="action-buttons">
+        <button id="add-connection-btn" class="action-button">Add Manual Connection</button>
+      </div>
       
       <!-- Inspector panel (hidden by default) -->
       <div class="ins-container">
@@ -64,8 +132,87 @@
           <!-- Tree view will be populated dynamically -->
         </div>
       </div>
+      
+      <!-- Legend panel -->
+      <div id="legend-panel">
+        <h3>Legend</h3>
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: #0077ff;"></div>
+          <div>Isolated Nodes</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: #ff5500;"></div>
+          <div>Giant Component</div>
+        </div>
+        <div class="legend-item">
+          <div class="legend-color" style="background-color: #76f09b;"></div>
+          <div>Small Components</div>
+        </div>
+      </div>
+      
+      <!-- Information Modal -->
+      <div id="info-modal" class="modal">
+        <div class="modal-content">
+          <span class="close">&times;</span>
+          <h2>Random Graph Evolution</h2>
+          
+          <p>This simulation demonstrates key concepts from random graph theory as developed by Erdős-Rényi and the phenomenon of the "birth of the giant component" described by Donald Knuth.</p>
+          
+          <h3>Erdős-Rényi Random Graph Model</h3>
+          <p>In this model, edges are added to a graph with probability p. The simulation shows how the graph structure evolves as more edges are added.</p>
+          
+          <div class="key-concept">
+            <p><strong>Phase Transition at p = 1/n:</strong> When the edge probability reaches this critical threshold, a "giant component" emerges - a connected component containing a significant portion of all nodes.</p>
+          </div>
+          
+          <h3>Birth of the Giant Component</h3>
+          <p>As you add edges to the graph:</p>
+          <ul>
+            <li>Initially, the graph consists of many small components (clusters of connected nodes).</li>
+            <li>As more edges are added, these components start to merge.</li>
+            <li>At the critical threshold p = 1/n, there's a phase transition where suddenly many components merge to form a giant component.</li>
+            <li>After this threshold, the giant component grows rapidly, absorbing more of the smaller components.</li>
+          </ul>
+          
+          <h3>How to Use This Simulation</h3>
+          <ul>
+            <li>Use the slider to adjust the edge probability p.</li>
+            <li>Click "Step" to add new edges based on the current probability.</li>
+            <li>Click "Auto" to automatically add edges at regular intervals.</li>
+            <li>Watch for the formation of the giant component when p approaches 1/n.</li>
+            <li>Components are color-coded to help visualize distinct connected parts of the graph.</li>
+          </ul>
+          
+          <p>This simulation helps visualize the surprising phenomenon that adding just a few critical edges can dramatically change the structure of a random graph.</p>
+        </div>
+      </div>
     </div>
     
     <script type="module" src="./index.ts"></script>
+    <script>
+      // Modal functionality
+      document.addEventListener('DOMContentLoaded', function() {
+        const modal = document.getElementById('info-modal');
+        const infoBtn = document.getElementById('info-btn');
+        const closeBtn = document.querySelector('.close');
+        
+        // Open modal when info button is clicked
+        infoBtn.addEventListener('click', function() {
+          modal.style.display = 'block';
+        });
+        
+        // Close modal when close button is clicked
+        closeBtn.addEventListener('click', function() {
+          modal.style.display = 'none';
+        });
+        
+        // Close modal when clicking outside the modal content
+        window.addEventListener('click', function(event) {
+          if (event.target === modal) {
+            modal.style.display = 'none';
+          }
+        });
+      });
+    </script>
   </body>
 </html>

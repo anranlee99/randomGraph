@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Random Graph Evolution Theory</title>
+  <style>
+    body {
+      font-family: 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+      background-color: #f9f9f9;
+    }
+    
+    h1 {
+      color: #0077ff;
+      border-bottom: 2px solid #0077ff;
+      padding-bottom: 10px;
+    }
+    
+    h2 {
+      color: #0066cc;
+      margin-top: 30px;
+    }
+    
+    .info-section {
+      background-color: white;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 25px;
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    .key-concept {
+      border-left: 4px solid #0077ff;
+      padding-left: 15px;
+      margin: 15px 0;
+      background-color: #f0f7ff;
+      padding: 10px 15px;
+    }
+    
+    .formula {
+      font-family: 'Courier New', monospace;
+      background-color: #f0f0f0;
+      padding: 10px;
+      border-radius: 4px;
+      margin: 10px 0;
+      display: inline-block;
+    }
+    
+    .concept-highlight {
+      color: #0077ff;
+      font-weight: bold;
+    }
+    
+    .img-container {
+      text-align: center;
+      margin: 20px 0;
+    }
+    
+    .img-placeholder {
+      background-color: #eee;
+      height: 200px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 4px;
+      color: #777;
+    }
+    
+    button.info-toggle {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background-color: #0077ff;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 50px;
+      height: 50px;
+      font-size: 24px;
+      cursor: pointer;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    
+    button.info-toggle:hover {
+      background-color: #0066cc;
+    }
+    
+    @media (max-width: 600px) {
+      body {
+        padding: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="theory-info">
+    <h1>Random Graph Evolution</h1>
+    
+    <div class="info-section">
+      <h2>Erdős-Rényi Random Graph Model</h2>
+      <p>In 1959, Paul Erdős and Alfréd Rényi introduced a model for generating random graphs that has become foundational in network theory. The model comes in two flavors:</p>
+      
+      <div class="key-concept">
+        <p><strong>G(n,M) model:</strong> A graph is chosen uniformly at random from the collection of all graphs that have n nodes and M edges.</p>
+      </div>
+      
+      <div class="key-concept">
+        <p><strong>G(n,p) model:</strong> A graph is constructed by connecting nodes randomly. Each edge has probability p of being present, independent of other edges.</p>
+        <p>This is the model implemented in this simulation.</p>
+      </div>
+    </div>
+    
+    <div class="info-section">
+      <h2>Phase Transitions and the Giant Component</h2>
+      
+      <p>One of the most fascinating discoveries by Erdős and Rényi was that random graphs undergo phase transitions. As the probability p increases, the structure of the graph changes dramatically at certain thresholds:</p>
+      
+      <div class="key-concept">
+        <p><span class="concept-highlight">When p < 1/n</span>: The graph consists mostly of small, isolated components (trees and simple cycles).</p>
+        
+        <p><span class="concept-highlight">When p = 1/n</span>: A phase transition occurs. At this critical threshold, a <strong>giant component</strong> emerges—a connected component containing a positive fraction of all nodes.</p>
+        
+        <p><span class="concept-highlight">When p > 1/n</span>: The giant component grows rapidly, absorbing more and more of the smaller components.</p>
+        
+        <p><span class="concept-highlight">When p > ln(n)/n</span>: The graph becomes fully connected with high probability.</p>
+      </div>
+      
+      <p>This phase transition at p = 1/n is what you can observe in this simulation, where components of different colors merge to form a giant component (the largest colored group).</p>
+    </div>
+    
+    <div class="info-section">
+      <h2>Donald Knuth and the Birth of Giant Components</h2>
+      
+      <p>Donald Knuth, while not the originator of random graph theory, has contributed to our understanding of how giant components form and evolve. The process is sometimes called "the birth of the giant component".</p>
+      
+      <div class="key-concept">
+        <p>As edges are added randomly to the graph, initially we see many small components. These components grow and occasionally merge when an edge connects nodes from different components.</p>
+        
+        <p>Near the critical threshold p = 1/n, the merger process accelerates dramatically. Components that were previously separate suddenly join together, creating a rapid phase transition where a giant component emerges.</p>
+        
+        <p>This process mirrors phenomena in physical systems like percolation and is fundamental to understanding real-world networks.</p>
+      </div>
+    </div>
+    
+    <div class="info-section">
+      <h2>Simulation Instructions</h2>
+      
+      <p>This interactive simulation allows you to explore these concepts:</p>
+      
+      <ul>
+        <li>The <strong>Edge Probability</strong> slider controls the probability (p) of adding an edge.</li>
+        <li>The <strong>Step</strong> button adds a random connection based on the current probability.</li>
+        <li>The <strong>Auto</strong> button automatically adds edges at regular intervals.</li>
+        <li>The <strong>Reset</strong> button clears all connections and starts fresh.</li>
+        <li>Components are color-coded to show connected parts of the graph.</li>
+        <li>The giant component (largest connected component) will be highlighted when it emerges.</li>
+      </ul>
+      
+      <p>Watch for the phase transition around p = 1/n, where a giant component suddenly forms!</p>
+    </div>
+  </div>
+  
+  <button class="info-toggle" id="info-toggle">i</button>
+  
+  <script>
+    // Toggle information panel visibility
+    const infoToggle = document.getElementById('info-toggle');
+    const theoryInfo = document.getElementById('theory-info');
+    let infoVisible = true;
+    
+    infoToggle.addEventListener('click', () => {
+      if (infoVisible) {
+        theoryInfo.style.display = 'none';
+        infoToggle.textContent = 'i';
+      } else {
+        theoryInfo.style.display = 'block';
+        infoToggle.textContent = 'x';
+      }
+      infoVisible = !infoVisible;
+    });
+  </script>
+</body>
+</html>

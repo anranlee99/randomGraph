@@ -12,7 +12,10 @@ import {
 import * as Matter from 'matter-js';
 import { Graph } from './graph';
 
-type Node = Matter.Body & { labelText: string };
+type Node = Matter.Body & { 
+    labelText: string;
+    componentId: number; // Track which component the node belongs to
+};
 
 // Create engine
 const engine = Engine.create();
@@ -40,6 +43,12 @@ const runner = Runner.create();
 // Global variables to store simulation state
 let nodes: Node[] = [];
 let graph: Graph;
+let components: number[][] = []; // Store the components of the graph
+let edgeProbability = 0.05; // Initial probability for Erdős-Rényi model
+let edgeCount = 0;
+let maxEdges = 0; // Maximum possible edges in the graph
+let giantComponentSize = 0; // Size of the largest component
+let giantComponentThreshold = false; // Whether we've crossed the threshold for giant component
 
 // Set up UI elements
 const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
@@ -48,6 +57,167 @@ const fullscreenBtn = document.getElementById('fullscreen-btn') as HTMLButtonEle
 const addConnectionBtn = document.getElementById('add-connection-btn') as HTMLButtonElement;
 const inspectorContainer = document.querySelector('.ins-container') as HTMLElement;
 
+// Create a stats panel
+function createStatsPanel() {
+    // Remove existing stats panel if it exists
+    const existingPanel = document.getElementById('stats-panel');
+    if (existingPanel) {
+        existingPanel.remove();
+    }
+
+    const statsPanel = document.createElement('div');
+    statsPanel.id = 'stats-panel';
+    statsPanel.style.position = 'fixed';
+    statsPanel.style.top = '60px';
+    statsPanel.style.right = '20px';
+    statsPanel.style.backgroundColor = 'rgba(20, 21, 31, 0.8)';
+    statsPanel.style.padding = '15px';
+    statsPanel.style.borderRadius = '5px';
+    statsPanel.style.color = 'white';
+    statsPanel.style.fontFamily = 'Arial, sans-serif';
+    statsPanel.style.fontSize = '14px';
+    statsPanel.style.zIndex = '100';
+    statsPanel.style.width = '250px';
+    statsPanel.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.3)';
+
+    demoElement.appendChild(statsPanel);
+    return statsPanel;
+}
+
+// Update stats display
+function updateStats() {
+    const statsPanel = document.getElementById('stats-panel') || createStatsPanel();
+    
+    // Calculate n(n-1)/2 which is the max possible edges in an undirected graph
+    const n = nodes.length;
+    maxEdges = (n * (n - 1)) / 2;
+    
+    // Theoretical threshold for giant component in Erdős-Rényi model: p = 1/n
+    const thresholdP = 1 / n;
+    const currentP = edgeCount / maxEdges;
+    
+    // Check if we've crossed the threshold
+    giantComponentThreshold = currentP >= thresholdP;
+    
+    // Update stats display
+    statsPanel.innerHTML = `
+        <h3 style="margin: 0 0 10px 0; border-bottom: 1px solid #555; padding-bottom: 5px;">Random Graph Stats</h3>
+        <div style="margin-bottom: 15px;">
+            <div><strong>Nodes:</strong> ${n}</div>
+            <div><strong>Edges:</strong> ${edgeCount} / ${maxEdges}</div>
+            <div><strong>Edge Probability (p):</strong> ${currentP.toFixed(4)}</div>
+            <div><strong>Threshold (1/n):</strong> ${thresholdP.toFixed(4)}</div>
+        </div>
+        <div style="margin-bottom: 15px;">
+            <div><strong>Components:</strong> ${components.length}</div>
+            <div><strong>Largest Component:</strong> ${giantComponentSize} nodes</div>
+            <div><strong>Giant Component:</strong> ${giantComponentThreshold ? 'YES ✓' : 'NO ✗'}</div>
+        </div>
+        <div style="margin-bottom: 10px; border-top: 1px solid #555; padding-top: 10px;">
+            <label for="probability-slider" style="display:block; margin-bottom: 5px;">Edge Probability: ${edgeProbability}</label>
+            <input type="range" id="probability-slider" min="0.01" max="1" step="0.01" value="${edgeProbability}" style="width: 100%">
+        </div>
+        <button id="step-btn" style="margin-right: 5px; padding: 5px 10px; background: #0077ff; border: none; color: white; border-radius: 3px; cursor: pointer;">Step</button>
+        <button id="auto-btn" style="padding: 5px 10px; background: #0077ff; border: none; color: white; border-radius: 3px; cursor: pointer;">Auto</button>
+    `;
+
+    // Add event listeners for the new controls
+    const slider = document.getElementById('probability-slider') as HTMLInputElement;
+    const stepBtn = document.getElementById('step-btn') as HTMLButtonElement;
+    const autoBtn = document.getElementById('auto-btn') as HTMLButtonElement;
+
+    if (slider) {
+        slider.addEventListener('input', (e) => {
+            edgeProbability = parseFloat((e.target as HTMLInputElement).value);
+            updateStats();
+        });
+    }
+
+    if (stepBtn) {
+        stepBtn.addEventListener('click', () => addRandomConnectionWithProbability());
+    }
+
+    if (autoBtn) {
+        let autoRunning = false;
+        let intervalId: number | null = null;
+
+        autoBtn.addEventListener('click', () => {
+            if (autoRunning) {
+                if (intervalId !== null) {
+                    clearInterval(intervalId);
+                    intervalId = null;
+                }
+                autoBtn.textContent = 'Auto';
+                autoRunning = false;
+            } else {
+                intervalId = window.setInterval(() => {
+                    addRandomConnectionWithProbability();
+                }, 200);
+                autoBtn.textContent = 'Stop';
+                autoRunning = true;
+            }
+        });
+    }
+}
+
+// Find connected components in the graph
+function findComponents() {
+    if (!graph) return [];
+
+    const n = nodes.length;
+    const visited = new Array(n).fill(false);
+    const componentAssignment = new Array(n).fill(-1);
+    components = [];
+
+    for (let i = 0; i < n; i++) {
+        if (!visited[i]) {
+            const component: number[] = [];
+            dfs(i, visited, component);
+            components.push(component);
+            
+            // Assign component ID to each node
+            component.forEach(nodeIndex => {
+                componentAssignment[nodeIndex] = components.length - 1;
+            });
+        }
+    }
+
+    // Find the size of the largest component
+    giantComponentSize = Math.max(...components.map(comp => comp.length));
+
+    // Assign component IDs to nodes
+    nodes.forEach((node, index) => {
+        node.componentId = componentAssignment[index];
+    });
+
+    return components;
+
+    // Helper function for DFS
+    function dfs(v: number, visited: boolean[], component: number[]) {
+        visited[v] = true;
+        component.push(v);
+        
+        for (const neighbor of graph.adjList[v]) {
+            if (!visited[neighbor]) {
+                dfs(neighbor, visited, component);
+            }
+        }
+    }
+}
+
+// Color scheme for components - using HSL for better distribution
+function getComponentColor(componentId: number, totalComponents: number) {
+    // Use HSL color model to get evenly distributed colors
+    const hue = componentId * (360 / (Math.max(totalComponents, 1)));
+    
+    // If this is the giant component (largest component), make it stand out
+    if (components[componentId] && components[componentId].length === giantComponentSize && giantComponentSize > 3) {
+        return `hsl(${hue}, 100%, 50%)`;
+    }
+    
+    return `hsl(${hue}, 70%, 60%)`;
+}
+
 // Set up the simulation
 function setupSimulation() {
     // Clear the world
@@ -55,6 +225,10 @@ function setupSimulation() {
 
     // Reset variables
     nodes = [];
+    edgeCount = 0;
+    components = [];
+    giantComponentSize = 0;
+    giantComponentThreshold = false;
 
     // Define grid parameters
     const rows = 10;
@@ -80,8 +254,9 @@ function setupSimulation() {
                 }
             }) as Node;
 
-            // Attach the label text as a custom property
+            // Attach the label text and component ID as custom properties
             node.labelText = label;
+            node.componentId = -1; // Initialize with no component
             nodes.push(node);
         }
     }
@@ -125,6 +300,12 @@ function setupSimulation() {
     // Create a graph instance for our nodes
     graph = new Graph(nodes.length);
 
+    // Initialize components
+    findComponents();
+    
+    // Set up stats panel
+    updateStats();
+
     // Return the components
     return { nodes, graph };
 }
@@ -142,7 +323,7 @@ function attachSpring(indexA: number, indexB: number) {
         indexA === indexB
     ) {
         console.error('Invalid node indices');
-        return;
+        return false;
     }
     
     const nodeA = nodes[indexA];
@@ -156,7 +337,7 @@ function attachSpring(indexA: number, indexB: number) {
             (constraint.bodyA === nodeB && constraint.bodyB === nodeA)
         ) {
             console.log('Connection already exists');
-            return;
+            return false;
         }
     }
 
@@ -182,25 +363,58 @@ function attachSpring(indexA: number, indexB: number) {
     // Update the graph as an undirected edge
     graph.addEdge(indexA, indexB);
     graph.addEdge(indexB, indexA);
+    
+    // Increment edge count
+    edgeCount++;
+    
+    // Update components after adding edge
+    findComponents();
+    updateStats();
+    
+    return true;
 }
 
 /**
- * Detect cycles in the graph and log them.
- * Returns an array of cycles, where each cycle is represented as an array of node indices.
+ * Add a random connection based on the current probability value
  */
-function detectCycles() {
-    if (!graph) {
-        console.error('Graph not initialized');
-        return [];
+function addRandomConnectionWithProbability() {
+    // Add connection with probability p
+    if (!nodes || nodes.length === 0) {
+        console.error('No nodes available');
+        return;
     }
 
-    const cycles = graph.findCycles();
-    console.log("Cycles detected:", cycles);
-    return cycles;
+    // For all possible pairs of nodes
+    let connections = 0;
+    const maxAttempts = 10; // Limit attempts to avoid infinite loops
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        // Pick a random pair
+        const i = Math.floor(Math.random() * nodes.length);
+        let j = Math.floor(Math.random() * nodes.length);
+
+        // Make sure we don't connect a node to itself
+        while (j === i) {
+            j = Math.floor(Math.random() * nodes.length);
+        }
+
+        // Check if we should add this edge based on probability
+        if (Math.random() < edgeProbability) {
+            // If connection was successfully added, break
+            if (attachSpring(i, j)) {
+                connections++;
+                break;
+            }
+        }
+    }
+
+    if (connections === 0) {
+        console.log("No new connections made in this step");
+    }
 }
 
 /**
- * Add a random connection between nodes
+ * Add a completely random connection (the original method)
  */
 function addRandomConnection() {
     if (!nodes || nodes.length === 0) {
@@ -217,13 +431,6 @@ function addRandomConnection() {
     }
 
     attachSpring(i, j);
-    const cycles = detectCycles();
-
-    // Highlight cycles if found (optional enhancement)
-    if (cycles.length > 0) {
-        console.log(`Found ${cycles.length} cycles!`);
-        // You could add visual feedback here
-    }
 }
 
 /**
@@ -266,17 +473,57 @@ inspectBtn.addEventListener('click', () => {
 
 fullscreenBtn.addEventListener('click', toggleFullscreen);
 
+// Update connection button text and function
+addConnectionBtn.textContent = "Add Connection (Manual)";
 addConnectionBtn.addEventListener('click', addRandomConnection);
 
 // Draw labels for each node after rendering the world
 Events.on(render, 'afterRender', () => {
     const context = render.context;
-    context.font = '14px Arial';
-    context.fillStyle = 'white';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-
+    
+    // First draw connections with component colors
+    const constraints = Composite.allConstraints(engine.world);
+    constraints.forEach(constraint => {
+        if (constraint.bodyA && constraint.bodyB) {
+            const bodyA = constraint.bodyA as Node;
+            const bodyB = constraint.bodyB as Node;
+            
+            // If both bodies are part of the same component, color the constraint
+            if (bodyA.componentId !== undefined && 
+                bodyB.componentId !== undefined && 
+                bodyA.componentId === bodyB.componentId &&
+                bodyA.componentId >= 0) {
+                
+                const color = getComponentColor(bodyA.componentId, components.length);
+                
+                const startPos = bodyA.position;
+                const endPos = bodyB.position;
+                
+                context.beginPath();
+                context.moveTo(startPos.x, startPos.y);
+                context.lineTo(endPos.x, endPos.y);
+                context.strokeStyle = color;
+                context.lineWidth = 2;
+                context.stroke();
+            }
+        }
+    });
+    
+    // Draw nodes with component colors
     nodes.forEach((node) => {
+        // Update node color based on component
+        if (node.componentId >= 0) {
+            const color = getComponentColor(node.componentId, components.length);
+            node.render.fillStyle = color;
+        } else {
+            node.render.fillStyle = '#0077ff'; // Default color
+        }
+        
+        // Draw the node label
+        context.font = '14px Arial';
+        context.fillStyle = 'white';
+        context.textAlign = 'center';
+        context.textBaseline = 'middle';
         context.fillText(node.labelText, node.position.x, node.position.y);
     });
 });
@@ -290,5 +537,6 @@ Runner.run(runner, engine);
 
 // Export functions for external use (e.g., console debugging)
 (window as any).attachSpring = attachSpring;
-(window as any).detectCycles = detectCycles;
+(window as any).findComponents = findComponents;
 (window as any).addRandomConnection = addRandomConnection;
+(window as any).addRandomConnectionWithProbability = addRandomConnectionWithProbability;
