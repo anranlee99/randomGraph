@@ -1,4 +1,7 @@
 name: deploy to github pages 
+on:
+  push:
+    branches: ["main"]
 jobs:
   my-job:
     name: my-job
