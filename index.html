@@ -65,6 +65,47 @@
         border-radius: 5px;
         border-left: 4px solid #0077ff;
       }
+
+      .formula {
+        font-family: 'Courier New', monospace;
+        background-color: rgba(255, 255, 255, 0.1);
+        padding: 10px;
+        border-radius: 4px;
+        margin: 10px 0;
+        display: inline-block;
+      }
+      
+      .concept-highlight {
+        color: #76f09b;
+        font-weight: bold;
+      }
+      
+      /* Tabs */
+      .tabs {
+        display: flex;
+        margin-bottom: 20px;
+      }
+      
+      .tab {
+        padding: 10px 15px;
+        background-color: rgba(255, 255, 255, 0.1);
+        cursor: pointer;
+        margin-right: 5px;
+        border-radius: 4px 4px 0 0;
+      }
+      
+      .tab.active {
+        background-color: rgba(255, 255, 255, 0.2);
+        border-bottom: 2px solid #76f09b;
+      }
+      
+      .tab-content {
+        display: none;
+      }
+      
+      .tab-content.active {
+        display: block;
+      }
     </style>
   </head>
   <body>
@@ -80,12 +121,6 @@
                 <svg fill="#000000" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
                   <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                   <path d="M0 0h24v24H0z" fill="none"/>
-                </svg>
-              </button>
-              <button class="matter-btn matter-btn-inspect" title="Inspect" id="inspect-btn">
-                <svg fill="#000000" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M0 0h24v24H0z" fill="none"/>
-                  <path d="M11 4.07V2.05c-2.01.2-3.84 1-5.32 2.21L7.1 5.69c1.11-.86 2.44-1.44 3.9-1.62zm7.32.19C16.84 3.05 15.01 2.25 13 2.05v2.02c1.46.18 2.79.76 3.9 1.62l1.42-1.43zM19.93 11h2.02c-.2-2.01-1-3.84-2.21-5.32L18.31 7.1c.86 1.11 1.44 2.44 1.62 3.9zM5.69 7.1L4.26 5.68C3.05 7.16 2.25 8.99 2.05 11h2.02c.18-1.46.76-2.79 1.62-3.9zM4.07 13H2.05c.2 2.01 1 3.84 2.21 5.32l1.43-1.43c-.86-1.1-1.44-2.43-1.62-3.89zM15 12c0-1.66-1.34-3-3-3s-3 1.34-3 3 1.34 3 3 3 3-1.34 3-3zm3.31 4.9l1.43 1.43c1.21-1.48 2.01-3.32 2.21-5.32h-2.02c-.18 1.45-.76 2.78-1.62 3.89zM13 19.93v2.02c2.01-.2 3.84-1 5.32-2.21l-1.43-1.43c-1.1.86-2.43 1.44-3.89 1.62zm-7.32-.19C7.16 20.95 9 21.75 11 21.95v-2.02c-1.46-.18-2.79-.76-3.9-1.62l-1.42 1.43z"/>
                 </svg>
               </button>
               <button class="matter-btn matter-btn-fullscreen" title="Fullscreen" id="fullscreen-btn">
@@ -119,20 +154,6 @@
         <button id="add-connection-btn" class="action-button">Add Manual Connection</button>
       </div>
       
-      <!-- Inspector panel (hidden by default) -->
-      <div class="ins-container">
-        <div class="ins-top-panel">
-          <input type="search" class="ins-search-box" placeholder="Search objects..." />
-        </div>
-        <div class="ins-control-group">
-          <button class="ins-button">Select</button>
-          <button class="ins-button">Pan</button>
-        </div>
-        <div class="ins-world-tree">
-          <!-- Tree view will be populated dynamically -->
-        </div>
-      </div>
-      
       <!-- Legend panel -->
       <div id="legend-panel">
         <h3>Legend</h3>
@@ -156,34 +177,129 @@
           <span class="close">&times;</span>
           <h2>Random Graph Evolution</h2>
           
-          <p>This simulation demonstrates key concepts from random graph theory as developed by Erdős-Rényi and the phenomenon of the "birth of the giant component" described by Donald Knuth.</p>
-          
-          <h3>Erdős-Rényi Random Graph Model</h3>
-          <p>In this model, edges are added to a graph with probability p. The simulation shows how the graph structure evolves as more edges are added.</p>
-          
-          <div class="key-concept">
-            <p><strong>Phase Transition at p = 1/n:</strong> When the edge probability reaches this critical threshold, a "giant component" emerges - a connected component containing a significant portion of all nodes.</p>
+          <div class="tabs">
+            <div class="tab active" data-tab="overview">Overview</div>
+            <div class="tab" data-tab="erdos">Erdős-Rényi Model</div>
+            <div class="tab" data-tab="giant">Giant Component</div>
+            <div class="tab" data-tab="usage">Usage Guide</div>
           </div>
           
-          <h3>Birth of the Giant Component</h3>
-          <p>As you add edges to the graph:</p>
-          <ul>
-            <li>Initially, the graph consists of many small components (clusters of connected nodes).</li>
-            <li>As more edges are added, these components start to merge.</li>
-            <li>At the critical threshold p = 1/n, there's a phase transition where suddenly many components merge to form a giant component.</li>
-            <li>After this threshold, the giant component grows rapidly, absorbing more of the smaller components.</li>
-          </ul>
+          <div id="overview" class="tab-content active">
+            <p>This simulation demonstrates key concepts from random graph theory as developed by Erdős-Rényi and the phenomenon of the "birth of the giant component" described by Donald Knuth.</p>
+            
+            <p>Key features of this visualization:</p>
+            <ul>
+              <li>Watch how connected components form and merge as edges are added</li>
+              <li>Observe the phase transition when p = 1/n where a giant component emerges</li>
+              <li>See how components are color-coded to track their evolution</li>
+              <li>Experiment with different edge probabilities to see their effect</li>
+            </ul>
+            
+            <div class="key-concept">
+              <p><strong>What you're looking at:</strong> Each circle represents a node in the graph. Lines between nodes are edges that connect them. Nodes of the same color belong to the same connected component (meaning you can travel from any node to any other node in that component by following edges).</p>
+            </div>
+            
+            <p>Use the tabs above to explore the theoretical concepts in more detail.</p>
+          </div>
           
-          <h3>How to Use This Simulation</h3>
-          <ul>
-            <li>Use the slider to adjust the edge probability p.</li>
-            <li>Click "Step" to add new edges based on the current probability.</li>
-            <li>Click "Auto" to automatically add edges at regular intervals.</li>
-            <li>Watch for the formation of the giant component when p approaches 1/n.</li>
-            <li>Components are color-coded to help visualize distinct connected parts of the graph.</li>
-          </ul>
+          <div id="erdos" class="tab-content">
+            <h3>Erdős-Rényi Random Graph Model</h3>
+            
+            <p>In 1959, Paul Erdős and Alfréd Rényi introduced a model for generating random graphs that has become foundational in network theory. The model comes in two flavors:</p>
+            
+            <div class="key-concept">
+              <p><strong>G(n,M) model:</strong> A graph is chosen uniformly at random from the collection of all graphs that have n nodes and M edges.</p>
+            </div>
+            
+            <div class="key-concept">
+              <p><strong>G(n,p) model:</strong> A graph is constructed by connecting nodes randomly. Each edge has probability p of being present, independent of other edges.</p>
+              <p>This is the model implemented in this simulation.</p>
+            </div>
+            
+            <p>One of the most fascinating discoveries by Erdős and Rényi was that random graphs undergo phase transitions. As the probability p increases, the structure of the graph changes dramatically at certain thresholds:</p>
+            
+            <div class="key-concept">
+              <p><span class="concept-highlight">When p &lt; 1/n</span>: The graph consists mostly of small, isolated components (trees and simple cycles).</p>
+              
+              <p><span class="concept-highlight">When p = 1/n</span>: A phase transition occurs. At this critical threshold, a <strong>giant component</strong> emerges—a connected component containing a positive fraction of all nodes.</p>
+              
+              <p><span class="concept-highlight">When p > 1/n</span>: The giant component grows rapidly, absorbing more and more of the smaller components.</p>
+              
+              <p><span class="concept-highlight">When p > ln(n)/n</span>: The graph becomes fully connected with high probability.</p>
+            </div>
+          </div>
           
-          <p>This simulation helps visualize the surprising phenomenon that adding just a few critical edges can dramatically change the structure of a random graph.</p>
+          <div id="giant" class="tab-content">
+            <h3>Birth of the Giant Component</h3>
+            
+            <p>Donald Knuth, while not the originator of random graph theory, has contributed to our understanding of how giant components form and evolve. The process is sometimes called "the birth of the giant component".</p>
+            
+            <div class="key-concept">
+              <p>As edges are added randomly to the graph, initially we see many small components. These components grow and occasionally merge when an edge connects nodes from different components.</p>
+              
+              <p>Near the critical threshold p = 1/n, the merger process accelerates dramatically. Components that were previously separate suddenly join together, creating a rapid phase transition where a giant component emerges.</p>
+              
+              <p>This process mirrors phenomena in physical systems like percolation and is fundamental to understanding real-world networks.</p>
+            </div>
+            
+            <h3>Why This Matters</h3>
+            
+            <p>The emergence of the giant component has profound implications for many real-world systems:</p>
+            
+            <ul>
+              <li><strong>Epidemiology:</strong> Disease spread becomes much more likely once a giant component forms in a contact network</li>
+              <li><strong>Internet:</strong> Information can reach a large portion of users once enough connections exist</li>
+              <li><strong>Social Networks:</strong> The "small world" phenomenon (six degrees of separation) depends on giant component formation</li>
+              <li><strong>Neural Networks:</strong> Cognitive functions emerge when enough neural connections form giant components</li>
+            </ul>
+            
+            <p>The simulation you're interacting with demonstrates this universal phenomenon that appears across many complex systems.</p>
+          </div>
+          
+          <div id="usage" class="tab-content">
+            <h3>Simulation Instructions</h3>
+            
+            <p>This interactive simulation allows you to explore random graph concepts:</p>
+            
+            <ul>
+              <li>The <strong>Edge Probability</strong> slider in the stats panel controls the probability (p) of adding an edge.</li>
+              <li>The <strong>Step</strong> button adds a random connection based on the current probability.</li>
+              <li>The <strong>Auto</strong> button automatically adds edges at regular intervals.</li>
+              <li>The <strong>Reset</strong> button clears all connections and starts fresh.</li>
+              <li>The <strong>Add Manual Connection</strong> button lets you add a random connection without using the probability setting.</li>
+            </ul>
+            
+            <div class="key-concept">
+              <p><strong>What to look for:</strong> Watch for the phase transition around p = 1/n (shown in the stats panel). When the probability crosses this threshold, you should see many smaller components rapidly merge into a single large one.</p>
+            </div>
+            
+            <h3>Suggested Experiments</h3>
+            
+            <p>Try these experiments to understand random graph behavior:</p>
+            
+            <ol>
+              <li><strong>Observe the phase transition:</strong> Start with a low probability (p = 0.005) and gradually increase it past the critical threshold (p = 1/n). Notice how suddenly the components merge.</li>
+              <li><strong>Compare different probabilities:</strong>
+                <ul>
+                  <li>Very low (p = 0.001): Observe how isolated nodes and small components dominate</li>
+                  <li>Near threshold (p = 1/n): Watch for the emergence of the giant component</li>
+                  <li>High (p = 0.1): See how quickly the giant component absorbs almost all nodes</li>
+                </ul>
+              </li>
+              <li><strong>Reset and replay:</strong> Run the simulation multiple times with the same probability to see the randomness in how networks form, even with identical parameters.</li>
+            </ol>
+            
+            <p>The stats panel shows important metrics:</p>
+            <ul>
+              <li><strong>Nodes:</strong> Total number of nodes in the graph</li>
+              <li><strong>Edges:</strong> Current number of edges / maximum possible edges</li>
+              <li><strong>Edge Probability (p):</strong> Current probability of adding an edge</li>
+              <li><strong>Threshold (1/n):</strong> The critical threshold where giant component emerges</li>
+              <li><strong>Components:</strong> Number of connected components in the graph</li>
+              <li><strong>Largest Component:</strong> Size of the largest component</li>
+              <li><strong>Giant Component:</strong> Whether a giant component has formed (p > 1/n)</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>
@@ -211,6 +327,27 @@
           if (event.target === modal) {
             modal.style.display = 'none';
           }
+        });
+        
+        // Tab functionality
+        const tabs = document.querySelectorAll('.tab');
+        tabs.forEach(tab => {
+          tab.addEventListener('click', () => {
+            // Remove active class from all tabs
+            tabs.forEach(t => t.classList.remove('active'));
+            
+            // Add active class to clicked tab
+            tab.classList.add('active');
+            
+            // Hide all tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+              content.classList.remove('active');
+            });
+            
+            // Show the selected tab content
+            const tabName = tab.getAttribute('data-tab');
+            document.getElementById(tabName).classList.add('active');
+          });
         });
       });
     </script>

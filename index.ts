@@ -11,10 +11,19 @@ import {
 } from 'matter-js';
 import * as Matter from 'matter-js';
 import { Graph } from './graph';
+import { 
+    getComponentColor, 
+    toggleFullscreen, 
+    createStatsPanel, 
+    updateStatsPanel,
+    showGiantComponentNotification,
+    showCycleDetails
+} from './utils';
 
 type Node = Matter.Body & { 
     labelText: string;
     componentId: number; // Track which component the node belongs to
+    highlighted: boolean; // For highlighting nodes in cycles
 };
 
 // Create engine
@@ -44,49 +53,27 @@ const runner = Runner.create();
 let nodes: Node[] = [];
 let graph: Graph;
 let components: number[][] = []; // Store the components of the graph
+let cycles: number[][] = []; // Store detected cycles
 let edgeProbability = 0.05; // Initial probability for Erdős-Rényi model
 let edgeCount = 0;
 let maxEdges = 0; // Maximum possible edges in the graph
 let giantComponentSize = 0; // Size of the largest component
 let giantComponentThreshold = false; // Whether we've crossed the threshold for giant component
+let statsPanel: HTMLElement;
+let highlightedCycle: number[] | null = null; // Currently highlighted cycle
 
 // Set up UI elements
 const resetBtn = document.getElementById('reset-btn') as HTMLButtonElement;
-const inspectBtn = document.getElementById('inspect-btn') as HTMLButtonElement;
 const fullscreenBtn = document.getElementById('fullscreen-btn') as HTMLButtonElement;
 const addConnectionBtn = document.getElementById('add-connection-btn') as HTMLButtonElement;
-const inspectorContainer = document.querySelector('.ins-container') as HTMLElement;
 
-// Create a stats panel
-function createStatsPanel() {
-    // Remove existing stats panel if it exists
-    const existingPanel = document.getElementById('stats-panel');
-    if (existingPanel) {
-        existingPanel.remove();
-    }
-
-    const statsPanel = document.createElement('div');
-    statsPanel.id = 'stats-panel';
-    statsPanel.style.position = 'fixed';
-    statsPanel.style.top = '60px';
-    statsPanel.style.right = '20px';
-    statsPanel.style.backgroundColor = 'rgba(20, 21, 31, 0.8)';
-    statsPanel.style.padding = '15px';
-    statsPanel.style.borderRadius = '5px';
-    statsPanel.style.color = 'white';
-    statsPanel.style.fontFamily = 'Arial, sans-serif';
-    statsPanel.style.fontSize = '14px';
-    statsPanel.style.zIndex = '100';
-    statsPanel.style.width = '250px';
-    statsPanel.style.boxShadow = '0 0 10px rgba(0, 0, 0, 0.3)';
-
-    demoElement.appendChild(statsPanel);
-    return statsPanel;
-}
-
-// Update stats display
+/**
+ * Update stats display and UI
+ */
 function updateStats() {
-    const statsPanel = document.getElementById('stats-panel') || createStatsPanel();
+    if (!statsPanel) {
+        statsPanel = createStatsPanel(demoElement);
+    }
     
     // Calculate n(n-1)/2 which is the max possible edges in an undirected graph
     const n = nodes.length;
@@ -97,70 +84,40 @@ function updateStats() {
     const currentP = edgeCount / maxEdges;
     
     // Check if we've crossed the threshold
+    const wasGiantComponent = giantComponentThreshold;
     giantComponentThreshold = currentP >= thresholdP;
     
-    // Update stats display
-    statsPanel.innerHTML = `
-        <h3 style="margin: 0 0 10px 0; border-bottom: 1px solid #555; padding-bottom: 5px;">Random Graph Stats</h3>
-        <div style="margin-bottom: 15px;">
-            <div><strong>Nodes:</strong> ${n}</div>
-            <div><strong>Edges:</strong> ${edgeCount} / ${maxEdges}</div>
-            <div><strong>Edge Probability (p):</strong> ${currentP.toFixed(4)}</div>
-            <div><strong>Threshold (1/n):</strong> ${thresholdP.toFixed(4)}</div>
-        </div>
-        <div style="margin-bottom: 15px;">
-            <div><strong>Components:</strong> ${components.length}</div>
-            <div><strong>Largest Component:</strong> ${giantComponentSize} nodes</div>
-            <div><strong>Giant Component:</strong> ${giantComponentThreshold ? 'YES ✓' : 'NO ✗'}</div>
-        </div>
-        <div style="margin-bottom: 10px; border-top: 1px solid #555; padding-top: 10px;">
-            <label for="probability-slider" style="display:block; margin-bottom: 5px;">Edge Probability: ${edgeProbability}</label>
-            <input type="range" id="probability-slider" min="0.01" max="1" step="0.01" value="${edgeProbability}" style="width: 100%">
-        </div>
-        <button id="step-btn" style="margin-right: 5px; padding: 5px 10px; background: #0077ff; border: none; color: white; border-radius: 3px; cursor: pointer;">Step</button>
-        <button id="auto-btn" style="padding: 5px 10px; background: #0077ff; border: none; color: white; border-radius: 3px; cursor: pointer;">Auto</button>
-    `;
-
-    // Add event listeners for the new controls
-    const slider = document.getElementById('probability-slider') as HTMLInputElement;
-    const stepBtn = document.getElementById('step-btn') as HTMLButtonElement;
-    const autoBtn = document.getElementById('auto-btn') as HTMLButtonElement;
-
-    if (slider) {
-        slider.addEventListener('input', (e) => {
-            edgeProbability = parseFloat((e.target as HTMLInputElement).value);
-            updateStats();
-        });
+    // Show notification if giant component just formed
+    if (!wasGiantComponent && giantComponentThreshold) {
+        showGiantComponentNotification(demoElement);
     }
-
-    if (stepBtn) {
-        stepBtn.addEventListener('click', () => addRandomConnectionWithProbability());
-    }
-
-    if (autoBtn) {
-        let autoRunning = false;
-        let intervalId: number | null = null;
-
-        autoBtn.addEventListener('click', () => {
-            if (autoRunning) {
-                if (intervalId !== null) {
-                    clearInterval(intervalId);
-                    intervalId = null;
-                }
-                autoBtn.textContent = 'Auto';
-                autoRunning = false;
-            } else {
-                intervalId = window.setInterval(() => {
-                    addRandomConnectionWithProbability();
-                }, 200);
-                autoBtn.textContent = 'Stop';
-                autoRunning = true;
-            }
-        });
-    }
+    
+    // Update stats display with callbacks for UI controls
+    updateStatsPanel(
+        statsPanel,
+        {
+            nodes,
+            edgeCount,
+            maxEdges,
+            edgeProbability,
+            components,
+            giantComponentSize,
+            giantComponentThreshold,
+            cycleCount: cycles.length,
+            onProbabilityChange: (prob) => {
+                edgeProbability = prob;
+                updateStats();
+            },
+            onStepClick: () => addRandomConnectionWithProbability(),
+            onAutoClick: () => {}, // This is handled in the updateStatsPanel function
+            onHighlightCycles: () => highlightRandomCycle()
+        }
+    );
 }
 
-// Find connected components in the graph
+/**
+ * Find connected components in the graph
+ */
 function findComponents() {
     if (!graph) return [];
 
@@ -190,6 +147,9 @@ function findComponents() {
         node.componentId = componentAssignment[index];
     });
 
+    // After finding components, detect cycles
+    detectCycles();
+
     return components;
 
     // Helper function for DFS
@@ -205,20 +165,9 @@ function findComponents() {
     }
 }
 
-// Color scheme for components - using HSL for better distribution
-function getComponentColor(componentId: number, totalComponents: number) {
-    // Use HSL color model to get evenly distributed colors
-    const hue = componentId * (360 / (Math.max(totalComponents, 1)));
-    
-    // If this is the giant component (largest component), make it stand out
-    if (components[componentId] && components[componentId].length === giantComponentSize && giantComponentSize > 3) {
-        return `hsl(${hue}, 100%, 50%)`;
-    }
-    
-    return `hsl(${hue}, 70%, 60%)`;
-}
-
-// Set up the simulation
+/**
+ * Set up the simulation
+ */
 function setupSimulation() {
     // Clear the world
     Composite.clear(engine.world, true);
@@ -227,8 +176,10 @@ function setupSimulation() {
     nodes = [];
     edgeCount = 0;
     components = [];
+    cycles = [];
     giantComponentSize = 0;
     giantComponentThreshold = false;
+    highlightedCycle = null;
 
     // Define grid parameters
     const rows = 10;
@@ -257,6 +208,7 @@ function setupSimulation() {
             // Attach the label text and component ID as custom properties
             node.labelText = label;
             node.componentId = -1; // Initialize with no component
+            node.highlighted = false; // Initialize not highlighted
             nodes.push(node);
         }
     }
@@ -434,44 +386,61 @@ function addRandomConnection() {
 }
 
 /**
- * Toggle fullscreen mode
+ * Detect cycles in the graph and store them.
+ * Returns an array of cycles, where each cycle is represented as an array of node indices.
  */
-function toggleFullscreen() {
-    const fullscreenElement =
-        document.fullscreenElement ||
-        (document as any).mozFullScreenElement ||
-        (document as any).webkitFullscreenElement;
-
-    if (!fullscreenElement) {
-        if (demoElement.requestFullscreen) {
-            demoElement.requestFullscreen();
-        } else if ((demoElement as any).mozRequestFullScreen) {
-            (demoElement as any).mozRequestFullScreen();
-        } else if ((demoElement as any).webkitRequestFullscreen) {
-            //@ts-ignore
-            (demoElement as any).webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
-        }
-        document.body.classList.add('matter-is-fullscreen');
-    } else {
-        if (document.exitFullscreen) {
-            document.exitFullscreen();
-        } else if ((document as any).mozCancelFullScreen) {
-            (document as any).mozCancelFullScreen();
-        } else if ((document as any).webkitExitFullscreen) {
-            (document as any).webkitExitFullscreen();
-        }
-        document.body.classList.remove('matter-is-fullscreen');
+function detectCycles() {
+    if (!graph) {
+        console.error('Graph not initialized');
+        return [];
     }
+
+    // Reset any existing highlighted nodes
+    nodes.forEach(node => {
+        node.highlighted = false;
+    });
+    
+    // Find all cycles in the graph
+    cycles = graph.findCycles();
+    console.log("Cycles detected:", cycles);
+    return cycles;
+}
+
+/**
+ * Highlight a random cycle in the visualization
+ */
+function highlightRandomCycle() {
+    // Reset previous highlight
+    if (highlightedCycle) {
+        highlightedCycle.forEach(nodeIndex => {
+            nodes[nodeIndex].highlighted = false;
+        });
+        highlightedCycle = null;
+    }
+    
+    // If there are no cycles, show an alert
+    if (cycles.length === 0) {
+        alert("No cycles detected in the current graph. Add more connections to create cycles.");
+        return;
+    }
+    
+    // Pick a random cycle
+    const randomIndex = Math.floor(Math.random() * cycles.length);
+    highlightedCycle = cycles[randomIndex];
+    
+    // Highlight the nodes in the cycle
+    highlightedCycle.forEach(nodeIndex => {
+        nodes[nodeIndex].highlighted = true;
+    });
+    
+    // Show cycle details
+    showCycleDetails(demoElement, highlightedCycle);
 }
 
 // Set up event listeners for UI buttons
 resetBtn.addEventListener('click', setupSimulation);
 
-inspectBtn.addEventListener('click', () => {
-    demoElement.classList.toggle('matter-inspect-active');
-});
-
-fullscreenBtn.addEventListener('click', toggleFullscreen);
+fullscreenBtn.addEventListener('click', () => toggleFullscreen(demoElement));
 
 // Update connection button text and function
 addConnectionBtn.textContent = "Add Connection (Manual)";
@@ -494,7 +463,17 @@ Events.on(render, 'afterRender', () => {
                 bodyA.componentId === bodyB.componentId &&
                 bodyA.componentId >= 0) {
                 
-                const color = getComponentColor(bodyA.componentId, components.length);
+                const color = getComponentColor(
+                    bodyA.componentId, 
+                    components.length,
+                    components,
+                    giantComponentSize
+                );
+                
+                // Check if this connection is part of the highlighted cycle
+                const isHighlighted = highlightedCycle && 
+                    highlightedCycle.includes(nodes.indexOf(bodyA)) && 
+                    highlightedCycle.includes(nodes.indexOf(bodyB));
                 
                 const startPos = bodyA.position;
                 const endPos = bodyB.position;
@@ -502,8 +481,16 @@ Events.on(render, 'afterRender', () => {
                 context.beginPath();
                 context.moveTo(startPos.x, startPos.y);
                 context.lineTo(endPos.x, endPos.y);
-                context.strokeStyle = color;
-                context.lineWidth = 2;
+                
+                // If highlighted, draw a thicker, brighter line
+                if (isHighlighted) {
+                    context.strokeStyle = '#ffff00';
+                    context.lineWidth = 4;
+                } else {
+                    context.strokeStyle = color;
+                    context.lineWidth = 2;
+                }
+                
                 context.stroke();
             }
         }
@@ -513,8 +500,21 @@ Events.on(render, 'afterRender', () => {
     nodes.forEach((node) => {
         // Update node color based on component
         if (node.componentId >= 0) {
-            const color = getComponentColor(node.componentId, components.length);
-            node.render.fillStyle = color;
+            const color = getComponentColor(
+                node.componentId, 
+                components.length,
+                components,
+                giantComponentSize
+            );
+            node.render.fillStyle = node.highlighted ? '#ffff00' : color;
+            
+            // If highlighted, add a glowing effect
+            if (node.highlighted) {
+                context.beginPath();
+                context.arc(node.position.x, node.position.y, 25, 0, Math.PI * 2);
+                context.fillStyle = 'rgba(255, 255, 0, 0.3)';
+                context.fill();
+            }
         } else {
             node.render.fillStyle = '#0077ff'; // Default color
         }
@@ -540,3 +540,5 @@ Runner.run(runner, engine);
 (window as any).findComponents = findComponents;
 (window as any).addRandomConnection = addRandomConnection;
 (window as any).addRandomConnectionWithProbability = addRandomConnectionWithProbability;
+(window as any).detectCycles = detectCycles;
+(window as any).highlightRandomCycle = highlightRandomCycle;
